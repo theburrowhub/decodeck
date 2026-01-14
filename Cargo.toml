@@ -30,6 +30,7 @@ anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 opener = "0.7"
+arboard = "3.4"
 
 [dev-dependencies]
 proptest = "1.5"
