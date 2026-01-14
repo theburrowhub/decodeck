@@ -1,10 +1,19 @@
 //! Decodeck CLI - Multi-encoding decoder with metadata display and interactive viewing
 
 use anyhow::{Context, Result};
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
 use decodeck::decoder::EncodedData;
-use decodeck::encoding::{detect::detect_encoding, EncodingInfo, EncodingType};
+use decodeck::encoding::{detect::detect_encoding, scan, EncodingInfo, EncodingType};
+
+/// Format for scanning structured content
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum ScanFormat {
+    /// JSON format
+    Json,
+    /// XML format
+    Xml,
+}
 use decodeck::error::{exit_codes, DecodeckError};
 use decodeck::input::{InputSource, SourceType};
 use decodeck::interactive::InteractivePrompt;
@@ -108,6 +117,27 @@ enum Commands {
         #[arg(short, long)]
         json: bool,
     },
+    /// Scan JSON/XML for encoded content
+    Scan {
+        /// JSON/XML content to scan (or use --file)
+        data: Option<String>,
+
+        /// Read from file
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+
+        /// Read from clipboard
+        #[arg(long)]
+        clipboard: bool,
+
+        /// Format hint (auto-detected if not specified)
+        #[arg(long, value_enum)]
+        format: Option<ScanFormat>,
+
+        /// Output in JSON format
+        #[arg(short, long)]
+        json: bool,
+    },
     /// Generate shell completion scripts
     #[command(after_help = r#"INSTALLATION EXAMPLES:
   # Bash - add to ~/.bashrc
@@ -172,6 +202,13 @@ fn main() -> ExitCode {
             copy,
             json,
         } => run_encode(data, file, clipboard, encoding, copy, json, cli.quiet),
+        Commands::Scan {
+            data,
+            file,
+            clipboard,
+            format,
+            json,
+        } => run_scan(data, file, clipboard, format, json, cli.quiet),
         Commands::Completions { shell } => {
             run_completions(shell);
             Ok(())
@@ -439,4 +476,83 @@ fn run_encode(
     }
 
     Ok(())
+}
+
+fn run_scan(
+    data: Option<String>,
+    file: Option<PathBuf>,
+    clipboard: bool,
+    format: Option<ScanFormat>,
+    json: bool,
+    quiet: bool,
+) -> Result<()> {
+    // Get input
+    let input = get_input(data, file, clipboard)?;
+    let input_str =
+        String::from_utf8(input.raw_data.clone()).context("Input is not valid UTF-8")?;
+
+    // Scan based on format
+    let result = match format {
+        Some(ScanFormat::Json) => scan::scan_json(&input_str)?,
+        Some(ScanFormat::Xml) => scan::scan_xml(&input_str)?,
+        None => scan::scan_auto(&input_str)?,
+    };
+
+    // Output
+    if json {
+        let output = serde_json::json!({
+            "success": true,
+            "format": result.format,
+            "values_scanned": result.values_scanned,
+            "findings_count": result.findings.len(),
+            "findings": result.findings.iter().map(|f| {
+                serde_json::json!({
+                    "path": f.path,
+                    "encoding": f.encoding.display_name(),
+                    "confidence": format!("{:?}", f.confidence).to_lowercase(),
+                    "original": f.original,
+                    "decoded": f.decoded,
+                    "is_text": f.is_text
+                })
+            }).collect::<Vec<_>>()
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        if !quiet {
+            println!(
+                "Scanned {} values in {} format",
+                result.values_scanned, result.format
+            );
+            println!("Found {} encoded values:\n", result.findings.len());
+        }
+
+        for finding in &result.findings {
+            println!("📍 {}", finding.path);
+            println!(
+                "   Encoding: {} ({:?})",
+                finding.encoding.display_name(),
+                finding.confidence
+            );
+            println!("   Original: {}", truncate_string(&finding.original, 60));
+            println!(
+                "   Decoded:  {}",
+                truncate_string(&finding.decoded, 60)
+            );
+            println!();
+        }
+
+        if result.findings.is_empty() && !quiet {
+            println!("No encoded content found.");
+        }
+    }
+
+    Ok(())
+}
+
+fn truncate_string(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len])
+    }
 }

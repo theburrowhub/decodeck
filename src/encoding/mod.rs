@@ -10,6 +10,7 @@ pub mod chain;
 pub mod detect;
 pub mod encode;
 pub mod hex;
+pub mod scan;
 pub mod url;
 
 use crate::error::DecodeckError;
