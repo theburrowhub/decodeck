@@ -51,6 +51,14 @@ enum Commands {
         #[arg(short, long, value_enum)]
         encoding: Option<EncodingType>,
 
+        /// Decode nested/chained encodings recursively
+        #[arg(short = 'c', long)]
+        chain: bool,
+
+        /// Maximum chain depth (default: 10)
+        #[arg(long, default_value = "10")]
+        max_depth: usize,
+
         /// Output in JSON format
         #[arg(short, long)]
         json: bool,
@@ -117,6 +125,8 @@ fn main() -> ExitCode {
             file,
             output,
             encoding,
+            chain,
+            max_depth,
             json,
             no_interactive,
             force,
@@ -126,6 +136,8 @@ fn main() -> ExitCode {
             file,
             output,
             encoding,
+            chain,
+            max_depth,
             json,
             no_interactive,
             force,
@@ -163,6 +175,8 @@ fn run_decode(
     file: Option<PathBuf>,
     output: Option<PathBuf>,
     encoding: Option<EncodingType>,
+    chain: bool,
+    max_depth: usize,
     json: bool,
     no_interactive: bool,
     force: bool,
@@ -181,24 +195,35 @@ fn run_decode(
     let input_str =
         String::from_utf8(input.raw_data.clone()).context("Input is not valid UTF-8")?;
 
-    // Determine encoding (explicit or auto-detect)
-    let encoding_info = if let Some(enc_type) = encoding {
-        EncodingInfo::explicit(enc_type)
+    // Decode - either chain mode or single
+    let (decoded, encoding_info, legacy_encoded, chain_info) = if chain {
+        // Chain decoding mode
+        let result = decodeck::encoding::chain::decode_chain(&input_str, Some(max_depth))?;
+        let last_encoding = result
+            .chain
+            .last()
+            .cloned()
+            .unwrap_or_else(|| EncodingInfo::explicit(EncodingType::Base64));
+        (result.data, last_encoding, None, Some(result.chain))
     } else {
-        detect_encoding(&input_str)
-    };
+        // Single encoding mode
+        let encoding_info = if let Some(enc_type) = encoding {
+            EncodingInfo::explicit(enc_type)
+        } else {
+            detect_encoding(&input_str)
+        };
 
-    // Decode based on encoding type
-    let (decoded, legacy_encoded) = if encoding_info.encoding_type == EncodingType::Base64 {
-        // Use existing Base64 decoder for backwards compatibility
-        let encoded = EncodedData::parse(&input_str)?;
-        let decoded = encoded.decode()?;
-        (decoded, Some(encoded))
-    } else {
-        // Use new multi-encoding decoder
-        let decoder = encoding_info.encoding_type.decoder();
-        let decoded = decoder.decode(&input_str)?;
-        (decoded, None)
+        let (decoded, legacy_encoded) = if encoding_info.encoding_type == EncodingType::Base64 {
+            let encoded = EncodedData::parse(&input_str)?;
+            let decoded = encoded.decode()?;
+            (decoded, Some(encoded))
+        } else {
+            let decoder = encoding_info.encoding_type.decoder();
+            let decoded = decoder.decode(&input_str)?;
+            (decoded, None)
+        };
+
+        (decoded, encoding_info, legacy_encoded, None)
     };
 
     // Detect content metadata
@@ -250,6 +275,14 @@ fn run_decode(
         decodeck::output::json::format(&result, &mut io::stdout())?;
     } else if !quiet {
         decodeck::output::text::format(&result, &mut io::stdout())?;
+
+        // Show chain info if available
+        if let Some(ref chain) = chain_info {
+            if chain.len() > 1 {
+                let chain_str: Vec<_> = chain.iter().map(|e| e.encoding_type.to_string()).collect();
+                println!("Chain: {} (depth: {})", chain_str.join(" → "), chain.len());
+            }
+        }
     }
 
     // Interactive prompt for viewable/playable content
