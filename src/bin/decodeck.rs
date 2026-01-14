@@ -43,6 +43,10 @@ enum Commands {
         #[arg(short, long)]
         file: Option<PathBuf>,
 
+        /// Read encoded data from clipboard
+        #[arg(long)]
+        clipboard: bool,
+
         /// Output file path (default: temporary file)
         #[arg(short, long)]
         output: Option<PathBuf>,
@@ -84,9 +88,17 @@ enum Commands {
         #[arg(short, long)]
         file: Option<PathBuf>,
 
+        /// Read data from clipboard
+        #[arg(long)]
+        clipboard: bool,
+
         /// Output encoding format
         #[arg(short, long, value_enum, default_value = "base64")]
         encoding: EncodingType,
+
+        /// Copy result to clipboard
+        #[arg(long)]
+        copy: bool,
 
         /// Output in JSON format
         #[arg(short, long)]
@@ -123,6 +135,7 @@ fn main() -> ExitCode {
         Commands::Decode {
             data,
             file,
+            clipboard,
             output,
             encoding,
             chain,
@@ -134,6 +147,7 @@ fn main() -> ExitCode {
         } => run_decode(
             data,
             file,
+            clipboard,
             output,
             encoding,
             chain,
@@ -147,9 +161,11 @@ fn main() -> ExitCode {
         Commands::Encode {
             data,
             file,
+            clipboard,
             encoding,
+            copy,
             json,
-        } => run_encode(data, file, encoding, json, cli.quiet),
+        } => run_encode(data, file, clipboard, encoding, copy, json, cli.quiet),
         Commands::Completions { shell } => {
             run_completions(shell);
             Ok(())
@@ -173,6 +189,7 @@ fn main() -> ExitCode {
 fn run_decode(
     data: Option<String>,
     file: Option<PathBuf>,
+    clipboard: bool,
     output: Option<PathBuf>,
     encoding: Option<EncodingType>,
     chain: bool,
@@ -185,8 +202,8 @@ fn run_decode(
 ) -> Result<()> {
     let start = Instant::now();
 
-    // Get input source (priority: argument > file > stdin)
-    let input = get_input(data, file)?;
+    // Get input source (priority: argument > clipboard > file > stdin)
+    let input = get_input(data, file, clipboard)?;
 
     // Validate input size
     input.validate_size(&max_size)?;
@@ -303,10 +320,19 @@ fn run_completions(shell: Shell) {
     generate(shell, &mut cmd, "decodeck", &mut io::stdout());
 }
 
-fn get_input(data: Option<String>, file: Option<PathBuf>) -> Result<InputSource> {
-    // Priority: argument > file > stdin
+fn get_input(data: Option<String>, file: Option<PathBuf>, clipboard: bool) -> Result<InputSource> {
+    // Priority: argument > clipboard > file > stdin
     if let Some(arg_data) = data {
         return InputSource::from_arg(&arg_data).map_err(|e| e.into());
+    }
+
+    if clipboard {
+        let mut cb = arboard::Clipboard::new().context("Failed to access clipboard")?;
+        let text = cb.get_text().context("Failed to read clipboard")?;
+        if text.is_empty() {
+            return Err(DecodeckError::NoInput.into());
+        }
+        return Ok(InputSource::new(SourceType::Stdin, text.into_bytes(), None));
     }
 
     if let Some(file_path) = file {
@@ -329,13 +355,20 @@ fn get_input(data: Option<String>, file: Option<PathBuf>) -> Result<InputSource>
 fn run_encode(
     data: Option<String>,
     file: Option<PathBuf>,
+    clipboard: bool,
     encoding: EncodingType,
+    copy: bool,
     json: bool,
     quiet: bool,
 ) -> Result<()> {
-    // Get input data
+    // Get input data (priority: argument > clipboard > file > stdin)
     let input_bytes = if let Some(arg_data) = data {
         arg_data.into_bytes()
+    } else if clipboard {
+        let mut cb = arboard::Clipboard::new().context("Failed to access clipboard")?;
+        cb.get_text()
+            .context("Failed to read clipboard")?
+            .into_bytes()
     } else if let Some(file_path) = file {
         fs::read(&file_path).context("Failed to read input file")?
     } else if !io::stdin().is_terminal() {
@@ -353,6 +386,16 @@ fn run_encode(
     // Encode the data
     let encoded = decodeck::encoding::encode::encode(&input_bytes, encoding)?;
 
+    // Copy to clipboard if requested
+    if copy {
+        let mut cb = arboard::Clipboard::new().context("Failed to access clipboard")?;
+        cb.set_text(&encoded)
+            .context("Failed to copy to clipboard")?;
+        if !quiet && !json {
+            eprintln!("Copied to clipboard");
+        }
+    }
+
     // Output
     if json {
         let output = serde_json::json!({
@@ -360,7 +403,8 @@ fn run_encode(
             "encoding": encoding.display_name(),
             "input_size": input_bytes.len(),
             "output_size": encoded.len(),
-            "encoded": encoded
+            "encoded": encoded,
+            "copied_to_clipboard": copy
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else if quiet {
