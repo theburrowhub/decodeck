@@ -1,0 +1,13 @@
+[workspace]
+# Use conventional commits to determine version bumps
+# feat: -> minor, fix: -> patch, breaking change -> major
+changelog_config = "keep-a-changelog"
+changelog_update = true
+git_tag_enable = true
+git_release_enable = true
+git_release_draft = false
+
+[[package]]
+name = "decodeck"
+# Don't publish to crates.io (optional, remove if you want to publish)
+publish = false
