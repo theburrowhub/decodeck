@@ -1,12 +1,13 @@
 //! Multi-encoding support module
 //!
-//! Provides a unified interface for decoding various encoding formats:
+//! Provides a unified interface for encoding and decoding various formats:
 //! Base64, Hex, Base32, URL percent-encoding, and Ascii85.
 
-pub mod base64;
 pub mod base32;
+pub mod base64;
 pub mod base85;
 pub mod detect;
+pub mod encode;
 pub mod hex;
 pub mod url;
 
