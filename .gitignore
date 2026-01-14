@@ -5,7 +5,7 @@ release/
 *.rs.bk
 *.rlib
 *.prof*
-Cargo.lock
+# Cargo.lock is included for reproducible builds (binary crate)
 
 # IDE
 .idea/
