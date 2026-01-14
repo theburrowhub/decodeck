@@ -72,9 +72,12 @@ pub fn parse_size(size_str: &str) -> Result<usize, DecodeckError> {
         (size_str.as_str(), "B")
     };
 
-    let num: f64 = num_str.trim().parse().map_err(|_| DecodeckError::SystemError {
-        message: format!("Invalid size format: {}", size_str),
-    })?;
+    let num: f64 = num_str
+        .trim()
+        .parse()
+        .map_err(|_| DecodeckError::SystemError {
+            message: format!("Invalid size format: {}", size_str),
+        })?;
 
     let multiplier: usize = match unit {
         "GB" => 1024 * 1024 * 1024,

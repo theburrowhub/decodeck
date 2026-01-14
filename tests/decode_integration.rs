@@ -87,8 +87,5 @@ fn decode_from_stdin_creates_file() {
 #[test]
 fn decode_invalid_base64_shows_error() {
     let mut cmd = Command::cargo_bin("decodeck").unwrap();
-    cmd.arg("decode")
-        .arg("Invalid$Base64!")
-        .assert()
-        .failure();
+    cmd.arg("decode").arg("Invalid$Base64!").assert().failure();
 }

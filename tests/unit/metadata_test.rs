@@ -1,7 +1,7 @@
 //! Unit tests for metadata detection
 
-use decodeck::metadata::{ContentCategory, ContentMetadata};
 use decodeck::metadata::magic;
+use decodeck::metadata::{ContentCategory, ContentMetadata};
 
 // T037: Tests for MIME detection
 mod mime_detection {
@@ -28,7 +28,10 @@ mod mime_detection {
         // MP3 with ID3 tag: ID3
         let mp3_data = [0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00];
         let metadata = magic::detect(&mp3_data);
-        assert!(metadata.mime_type.contains("audio") || metadata.mime_type == "application/octet-stream");
+        assert!(
+            metadata.mime_type.contains("audio")
+                || metadata.mime_type == "application/octet-stream"
+        );
     }
 
     #[test]

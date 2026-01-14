@@ -73,8 +73,8 @@ mod path_traversal_prevention {
 // T070: Tests for existing file detection
 mod existing_file_detection {
     use super::*;
-    use tempfile::tempdir;
     use std::fs::File;
+    use tempfile::tempdir;
 
     #[test]
     fn detect_existing_file() {

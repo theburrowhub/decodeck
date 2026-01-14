@@ -4,7 +4,7 @@ Auto-generated from all feature plans. Last updated: 2026-01-14
 
 ## Active Technologies
 
-- Rust 1.75+ (edition 2021) + clap (CLI parsing), base64 (encoding), infer (MIME detection) (001-base64-decoder)
+- Rust 1.75+ (edition 2021) + clap 4.4 (existing), clap_complete (new) (002-shell-completions)
 
 ## Project Structure
 
@@ -23,7 +23,7 @@ Rust 1.75+ (edition 2021): Follow standard conventions
 
 ## Recent Changes
 
-- 001-base64-decoder: Added Rust 1.75+ (edition 2021) + clap (CLI parsing), base64 (encoding), infer (MIME detection)
+- 002-shell-completions: Added Rust 1.75+ (edition 2021) + clap 4.4 (existing), clap_complete (new)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

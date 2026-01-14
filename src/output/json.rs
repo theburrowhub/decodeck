@@ -77,7 +77,6 @@ pub fn format(result: &DecodeResult, writer: &mut impl Write) -> std::io::Result
         warnings: &result.warnings,
     };
 
-    let json = serde_json::to_string_pretty(&output)
-        .map_err(std::io::Error::other)?;
+    let json = serde_json::to_string_pretty(&output).map_err(std::io::Error::other)?;
     writeln!(writer, "{}", json)
 }

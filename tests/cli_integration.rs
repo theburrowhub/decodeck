@@ -38,7 +38,12 @@ mod quiet_flag {
         let stdout = String::from_utf8_lossy(&output.stdout);
 
         // Should still show where file was saved
-        assert!(stdout.contains("Saved to:") || stdout.contains(".bin") || stdout.is_empty() || output.status.success());
+        assert!(
+            stdout.contains("Saved to:")
+                || stdout.contains(".bin")
+                || stdout.is_empty()
+                || output.status.success()
+        );
     }
 
     #[test]

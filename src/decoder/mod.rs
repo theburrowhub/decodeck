@@ -62,12 +62,8 @@ impl EncodedData {
     /// Decode the Base64 data to bytes
     pub fn decode(&self) -> Result<Vec<u8>, DecodeckError> {
         let result = match self.variant {
-            Base64Variant::Standard => {
-                base64::engine::general_purpose::STANDARD.decode(&self.data)
-            }
-            Base64Variant::UrlSafe => {
-                base64::engine::general_purpose::URL_SAFE.decode(&self.data)
-            }
+            Base64Variant::Standard => base64::engine::general_purpose::STANDARD.decode(&self.data),
+            Base64Variant::UrlSafe => base64::engine::general_purpose::URL_SAFE.decode(&self.data),
         };
 
         result.map_err(|e| DecodeckError::DecodeFailed {
@@ -90,8 +86,12 @@ fn add_padding(input: &str) -> String {
 /// Validate Base64 characters
 fn validate_base64(input: &str, variant: Base64Variant) -> Result<(), DecodeckError> {
     let valid_chars: &str = match variant {
-        Base64Variant::Standard => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",
-        Base64Variant::UrlSafe => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=",
+        Base64Variant::Standard => {
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+        }
+        Base64Variant::UrlSafe => {
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_="
+        }
     };
 
     for (pos, c) in input.chars().enumerate() {

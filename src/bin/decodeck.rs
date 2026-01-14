@@ -1,7 +1,8 @@
 //! Decodeck CLI - Base64 decoder with metadata display and interactive viewing
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Shell};
 use decodeck::decoder::EncodedData;
 use decodeck::error::{exit_codes, DecodeckError};
 use decodeck::input::{InputSource, SourceType};
@@ -61,6 +62,24 @@ enum Commands {
         #[arg(long, default_value = "100MB")]
         max_size: String,
     },
+    /// Generate shell completion scripts
+    #[command(after_help = r#"INSTALLATION EXAMPLES:
+  # Bash - add to ~/.bashrc
+  decodeck completions bash >> ~/.bashrc
+
+  # Zsh - add to fpath
+  decodeck completions zsh > ~/.zfunc/_decodeck
+
+  # Fish - save to completions dir
+  decodeck completions fish > ~/.config/fish/completions/decodeck.fish
+
+  # PowerShell - add to profile
+  decodeck completions powershell >> $PROFILE"#)]
+    Completions {
+        /// Target shell
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 fn main() -> ExitCode {
@@ -79,7 +98,20 @@ fn main() -> ExitCode {
             no_interactive,
             force,
             max_size,
-        } => run_decode(data, file, output, json, no_interactive, force, cli.quiet, max_size),
+        } => run_decode(
+            data,
+            file,
+            output,
+            json,
+            no_interactive,
+            force,
+            cli.quiet,
+            max_size,
+        ),
+        Commands::Completions { shell } => {
+            run_completions(shell);
+            Ok(())
+        }
     };
 
     match result {
@@ -114,8 +146,8 @@ fn run_decode(
     input.validate_size(&max_size)?;
 
     // Parse and validate Base64
-    let input_str = String::from_utf8(input.raw_data.clone())
-        .context("Input is not valid UTF-8")?;
+    let input_str =
+        String::from_utf8(input.raw_data.clone()).context("Input is not valid UTF-8")?;
     let encoded = EncodedData::parse(&input_str)?;
 
     // Decode
@@ -182,6 +214,11 @@ fn run_decode(
     }
 
     Ok(())
+}
+
+fn run_completions(shell: Shell) {
+    let mut cmd = Cli::command();
+    generate(shell, &mut cmd, "decodeck", &mut io::stdout());
 }
 
 fn get_input(data: Option<String>, file: Option<PathBuf>) -> Result<InputSource> {
