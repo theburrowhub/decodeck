@@ -67,6 +67,10 @@ enum Commands {
         #[arg(short, long)]
         json: bool,
 
+        /// Raw output mode - write decoded bytes to stdout (for piping)
+        #[arg(short = 'r', long)]
+        raw: bool,
+
         /// Skip interactive view/play prompt
         #[arg(long)]
         no_interactive: bool,
@@ -141,6 +145,7 @@ fn main() -> ExitCode {
             chain,
             max_depth,
             json,
+            raw,
             no_interactive,
             force,
             max_size,
@@ -153,6 +158,7 @@ fn main() -> ExitCode {
             chain,
             max_depth,
             json,
+            raw,
             no_interactive,
             force,
             cli.quiet,
@@ -195,6 +201,7 @@ fn run_decode(
     chain: bool,
     max_depth: usize,
     json: bool,
+    raw: bool,
     no_interactive: bool,
     force: bool,
     quiet: bool,
@@ -243,8 +250,26 @@ fn run_decode(
         (decoded, encoding_info, legacy_encoded, None)
     };
 
+    // Raw mode - write directly to stdout and exit
+    if raw {
+        use std::io::Write;
+        io::stdout().write_all(&decoded)?;
+        io::stdout().flush()?;
+        return Ok(());
+    }
+
     // Detect content metadata
     let metadata = magic::detect(&decoded);
+
+    // Check for stdout output (output="-")
+    let write_to_stdout = output.as_ref().map(|p| p.as_os_str() == "-").unwrap_or(false);
+
+    if write_to_stdout {
+        use std::io::Write;
+        io::stdout().write_all(&decoded)?;
+        io::stdout().flush()?;
+        return Ok(());
+    }
 
     // Determine output path
     let is_temp = output.is_none();
