@@ -1,6 +1,7 @@
 //! JSON output formatter
 
 use super::DecodeResult;
+use crate::encoding::{DetectionConfidence, EncodingType};
 use serde::Serialize;
 use std::io::Write;
 
@@ -10,7 +11,7 @@ pub struct JsonOutput<'a> {
     pub success: bool,
     pub output: OutputInfo<'a>,
     pub metadata: MetadataInfo<'a>,
-    pub encoding: EncodingInfo,
+    pub encoding: EncodingOutput,
     pub duration_ms: u64,
     pub warnings: &'a [String],
 }
@@ -33,28 +34,40 @@ pub struct MetadataInfo<'a> {
 }
 
 #[derive(Serialize)]
-pub struct EncodingInfo {
-    pub variant: String,
-    pub had_padding: bool,
+pub struct EncodingOutput {
+    #[serde(rename = "type")]
+    pub encoding_type: EncodingType,
+    pub detected: bool,
+    pub confidence: DetectionConfidence,
+    /// Base64-specific: variant (standard/url-safe)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<String>,
+    /// Base64-specific: whether input had padding
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub had_padding: Option<bool>,
 }
 
 /// Format decode result as JSON
 pub fn format(result: &DecodeResult, writer: &mut impl Write) -> std::io::Result<()> {
     let category = format!("{:?}", result.metadata.category).to_lowercase();
 
-    let encoding = if let Some(ref enc) = result.encoding {
-        EncodingInfo {
-            variant: match enc.variant {
-                crate::decoder::Base64Variant::Standard => "standard".to_string(),
-                crate::decoder::Base64Variant::UrlSafe => "url-safe".to_string(),
-            },
-            had_padding: enc.has_padding,
-        }
+    // Build encoding output with Base64-specific details if available
+    let (variant, had_padding) = if let Some(ref enc) = result.encoding {
+        let variant_str = match enc.variant {
+            crate::decoder::Base64Variant::Standard => "standard".to_string(),
+            crate::decoder::Base64Variant::UrlSafe => "url-safe".to_string(),
+        };
+        (Some(variant_str), Some(enc.has_padding))
     } else {
-        EncodingInfo {
-            variant: "unknown".to_string(),
-            had_padding: false,
-        }
+        (None, None)
+    };
+
+    let encoding = EncodingOutput {
+        encoding_type: result.encoding_info.encoding_type,
+        detected: result.encoding_info.detected,
+        confidence: result.encoding_info.confidence,
+        variant,
+        had_padding,
     };
 
     let output = JsonOutput {

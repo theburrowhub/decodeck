@@ -4,6 +4,7 @@ pub mod json;
 pub mod text;
 
 use crate::decoder::EncodedData;
+use crate::encoding::EncodingInfo;
 use crate::error::DecodeckError;
 use crate::metadata::ContentMetadata;
 use serde::Serialize;
@@ -35,9 +36,11 @@ pub struct DecodeResult {
     pub output: OutputFile,
     /// Content metadata
     pub metadata: ContentMetadata,
-    /// Encoding information
+    /// Legacy Base64 encoding information (for backwards compatibility)
     #[serde(skip)]
     pub encoding: Option<EncodedData>,
+    /// Multi-encoding type information
+    pub encoding_info: EncodingInfo,
     /// Processing duration in milliseconds
     pub duration_ms: u64,
     /// Any warnings generated
