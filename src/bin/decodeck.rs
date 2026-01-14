@@ -18,7 +18,7 @@ use std::time::Instant;
 
 #[derive(Parser)]
 #[command(name = "decodeck")]
-#[command(author, version, about = "Decode encoded data (Base64, Hex, Base32, URL, Base85) to files with metadata display", long_about = None)]
+#[command(author, version, about = "Encode and decode data (Base64, Hex, Base32, URL, Base85)", long_about = None)]
 struct Cli {
     /// Enable verbose output
     #[arg(short, long, global = true)]
@@ -66,6 +66,23 @@ enum Commands {
         /// Maximum input size (e.g., "100MB")
         #[arg(long, default_value = "100MB")]
         max_size: String,
+    },
+    /// Encode data to specified format
+    Encode {
+        /// Data string to encode (or use --file)
+        data: Option<String>,
+
+        /// Read data from file
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+
+        /// Output encoding format
+        #[arg(short, long, value_enum, default_value = "base64")]
+        encoding: EncodingType,
+
+        /// Output in JSON format
+        #[arg(short, long)]
+        json: bool,
     },
     /// Generate shell completion scripts
     #[command(after_help = r#"INSTALLATION EXAMPLES:
@@ -115,6 +132,12 @@ fn main() -> ExitCode {
             cli.quiet,
             max_size,
         ),
+        Commands::Encode {
+            data,
+            file,
+            encoding,
+            json,
+        } => run_encode(data, file, encoding, json, cli.quiet),
         Commands::Completions { shell } => {
             run_completions(shell);
             Ok(())
@@ -268,4 +291,50 @@ fn get_input(data: Option<String>, file: Option<PathBuf>) -> Result<InputSource>
     }
 
     Err(DecodeckError::NoInput.into())
+}
+
+fn run_encode(
+    data: Option<String>,
+    file: Option<PathBuf>,
+    encoding: EncodingType,
+    json: bool,
+    quiet: bool,
+) -> Result<()> {
+    // Get input data
+    let input_bytes = if let Some(arg_data) = data {
+        arg_data.into_bytes()
+    } else if let Some(file_path) = file {
+        fs::read(&file_path).context("Failed to read input file")?
+    } else if !io::stdin().is_terminal() {
+        let mut buffer = Vec::new();
+        io::stdin().read_to_end(&mut buffer)?;
+        buffer
+    } else {
+        return Err(DecodeckError::NoInput.into());
+    };
+
+    if input_bytes.is_empty() {
+        return Err(DecodeckError::NoInput.into());
+    }
+
+    // Encode the data
+    let encoded = decodeck::encoding::encode::encode(&input_bytes, encoding)?;
+
+    // Output
+    if json {
+        let output = serde_json::json!({
+            "success": true,
+            "encoding": encoding.display_name(),
+            "input_size": input_bytes.len(),
+            "output_size": encoded.len(),
+            "encoded": encoded
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else if quiet {
+        print!("{}", encoded);
+    } else {
+        println!("{}", encoded);
+    }
+
+    Ok(())
 }
