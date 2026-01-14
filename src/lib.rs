@@ -1,11 +1,13 @@
-//! Decodeck - Base64 decoding library with metadata detection
+//! Decodeck - Multi-encoding decoding library with metadata detection
 //!
 //! This library provides functionality for:
-//! - Decoding Base64 data (standard and URL-safe variants)
+//! - Decoding multiple formats: Base64, Hex, Base32, URL, Ascii85
+//! - Auto-detecting encoding types
 //! - Detecting content MIME types via magic bytes
 //! - Formatting output in text and JSON formats
 
 pub mod decoder;
+pub mod encoding;
 pub mod error;
 pub mod input;
 pub mod interactive;

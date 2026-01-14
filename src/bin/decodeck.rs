@@ -1,9 +1,10 @@
-//! Decodeck CLI - Base64 decoder with metadata display and interactive viewing
+//! Decodeck CLI - Multi-encoding decoder with metadata display and interactive viewing
 
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use decodeck::decoder::EncodedData;
+use decodeck::encoding::{detect::detect_encoding, EncodingInfo, EncodingType};
 use decodeck::error::{exit_codes, DecodeckError};
 use decodeck::input::{InputSource, SourceType};
 use decodeck::interactive::InteractivePrompt;
@@ -17,7 +18,7 @@ use std::time::Instant;
 
 #[derive(Parser)]
 #[command(name = "decodeck")]
-#[command(author, version, about = "Decode Base64 data to files with metadata display", long_about = None)]
+#[command(author, version, about = "Decode encoded data (Base64, Hex, Base32, URL, Base85) to files with metadata display", long_about = None)]
 struct Cli {
     /// Enable verbose output
     #[arg(short, long, global = true)]
@@ -33,18 +34,22 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Decode Base64 data to file
+    /// Decode encoded data to file
     Decode {
-        /// Base64 encoded string to decode
+        /// Encoded string to decode
         data: Option<String>,
 
-        /// Read Base64 from file
+        /// Read encoded data from file
         #[arg(short, long)]
         file: Option<PathBuf>,
 
         /// Output file path (default: temporary file)
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Encoding type (auto-detected if not specified)
+        #[arg(short, long, value_enum)]
+        encoding: Option<EncodingType>,
 
         /// Output in JSON format
         #[arg(short, long)]
@@ -94,6 +99,7 @@ fn main() -> ExitCode {
             data,
             file,
             output,
+            encoding,
             json,
             no_interactive,
             force,
@@ -102,6 +108,7 @@ fn main() -> ExitCode {
             data,
             file,
             output,
+            encoding,
             json,
             no_interactive,
             force,
@@ -127,10 +134,12 @@ fn main() -> ExitCode {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_decode(
     data: Option<String>,
     file: Option<PathBuf>,
     output: Option<PathBuf>,
+    encoding: Option<EncodingType>,
     json: bool,
     no_interactive: bool,
     force: bool,
@@ -145,13 +154,29 @@ fn run_decode(
     // Validate input size
     input.validate_size(&max_size)?;
 
-    // Parse and validate Base64
+    // Get input as string
     let input_str =
         String::from_utf8(input.raw_data.clone()).context("Input is not valid UTF-8")?;
-    let encoded = EncodedData::parse(&input_str)?;
 
-    // Decode
-    let decoded = encoded.decode()?;
+    // Determine encoding (explicit or auto-detect)
+    let encoding_info = if let Some(enc_type) = encoding {
+        EncodingInfo::explicit(enc_type)
+    } else {
+        detect_encoding(&input_str)
+    };
+
+    // Decode based on encoding type
+    let (decoded, legacy_encoded) = if encoding_info.encoding_type == EncodingType::Base64 {
+        // Use existing Base64 decoder for backwards compatibility
+        let encoded = EncodedData::parse(&input_str)?;
+        let decoded = encoded.decode()?;
+        (decoded, Some(encoded))
+    } else {
+        // Use new multi-encoding decoder
+        let decoder = encoding_info.encoding_type.decoder();
+        let decoded = decoder.decode(&input_str)?;
+        (decoded, None)
+    };
 
     // Detect content metadata
     let metadata = magic::detect(&decoded);
@@ -191,7 +216,8 @@ fn run_decode(
             created_at: Some(std::time::SystemTime::now()),
         },
         metadata: metadata.clone(),
-        encoding: Some(encoded),
+        encoding: legacy_encoded,
+        encoding_info: encoding_info.clone(),
         duration_ms: duration.as_millis() as u64,
         warnings: vec![],
     };
